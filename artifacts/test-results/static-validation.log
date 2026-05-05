@@ -1,0 +1,79 @@
+[static] Starting static validation
+[static] Environment summary
+[env][INFO] Repository root: /Data/KeyuHu/code/DSAA4040
+[env][PASS] conda found at /home/KeyuHu/miniconda3/bin/conda
+[env][WARN] conda environment 'cloud' is not active
+[env][WARN] kubectl is not available
+[env][PASS] openssl found at /home/KeyuHu/miniconda3/bin/openssl
+[env][WARN] jq is not available
+[env][WARN] yq is not available
+[env][PASS] curl found at /usr/bin/curl
+[env][PASS] wget found at /usr/bin/wget
+[env][WARN] docker is installed but inaccessible: permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
+[env][WARN] k3d is not available
+[env][WARN] Live Kubernetes validation cannot be run on this server because Docker access is unavailable or denied.
+[env] LIVE_TOOLING_READY=false
+[env] LIVE_CLUSTER_AVAILABLE=false
+[static] Checking shell syntax
+[static] Checking required repository structure
+[static] Required path present: README.md
+[static] Required path present: AGENTS.md
+[static] Required path present: environment.yml
+[static] Required path present: docs/proposal.md
+[static] Required path present: docs/architecture.md
+[static] Required path present: docs/rbac-matrix.md
+[static] Required path present: docs/onboarding-guide.md
+[static] Required path present: docs/testing-guide.md
+[static] Required path present: docs/demo-script.md
+[static] Required path present: docs/ha-discussion.md
+[static] Required path present: manifests/rbac
+[static] Required path present: manifests/quota
+[static] Required path present: manifests/limitrange
+[static] Required path present: manifests/netpol
+[static] Required path present: manifests/podsecurity
+[static] Required path present: manifests/test-workloads
+[static] Required path present: scripts/bootstrap-cluster.sh
+[static] Required path present: scripts/check-environment.sh
+[static] Required path present: scripts/onboard-team.sh
+[static] Required path present: scripts/offboard-team.sh
+[static] Required path present: scripts/issue-user-kubeconfig.sh
+[static] Required path present: scripts/static-validate.sh
+[static] Required path present: scripts/run-tests.sh
+[static] Required path present: artifacts/kubeconfigs
+[static] Required path present: artifacts/rendered
+[static] Required path present: artifacts/test-results
+[static] Refreshing rendered manifests under artifacts/rendered
+[static] Rendered manifests/limitrange/limitrange.yaml.tpl -> artifacts/rendered/team-a/limitrange/limitrange.yaml
+[static] Rendered manifests/netpol/allow-same-namespace-ingress.yaml.tpl -> artifacts/rendered/team-a/netpol/allow-same-namespace-ingress.yaml
+[static] Rendered manifests/netpol/default-deny-ingress.yaml.tpl -> artifacts/rendered/team-a/netpol/default-deny-ingress.yaml
+[static] Rendered manifests/podsecurity/namespace.yaml.tpl -> artifacts/rendered/team-a/podsecurity/namespace.yaml
+[static] Rendered manifests/quota/resourcequota.yaml.tpl -> artifacts/rendered/team-a/quota/resourcequota.yaml
+[static] Rendered manifests/rbac/developer-role.yaml.tpl -> artifacts/rendered/team-a/rbac/developer-role.yaml
+[static] Rendered manifests/rbac/developer-rolebinding.yaml.tpl -> artifacts/rendered/team-a/rbac/developer-rolebinding.yaml
+[static] Rendered manifests/rbac/viewer-rolebinding.yaml.tpl -> artifacts/rendered/team-a/rbac/viewer-rolebinding.yaml
+[static] Rendered manifests/test-workloads/defaulted-pod.yaml.tpl -> artifacts/rendered/team-a/test-workloads/defaulted-pod.yaml
+[static] Rendered manifests/test-workloads/http-server.yaml.tpl -> artifacts/rendered/team-a/test-workloads/http-server.yaml
+[static] Rendered manifests/test-workloads/network-client.yaml.tpl -> artifacts/rendered/team-a/test-workloads/network-client.yaml
+[static] Rendered manifests/test-workloads/normal-deployment.yaml.tpl -> artifacts/rendered/team-a/test-workloads/normal-deployment.yaml
+[static] Rendered manifests/test-workloads/oversized-pod.yaml.tpl -> artifacts/rendered/team-a/test-workloads/oversized-pod.yaml
+[static] Rendered manifests/test-workloads/quota-exceeded-pod.yaml.tpl -> artifacts/rendered/team-a/test-workloads/quota-exceeded-pod.yaml
+[static] Rendered manifests/limitrange/limitrange.yaml.tpl -> artifacts/rendered/team-b/limitrange/limitrange.yaml
+[static] Rendered manifests/netpol/allow-same-namespace-ingress.yaml.tpl -> artifacts/rendered/team-b/netpol/allow-same-namespace-ingress.yaml
+[static] Rendered manifests/netpol/default-deny-ingress.yaml.tpl -> artifacts/rendered/team-b/netpol/default-deny-ingress.yaml
+[static] Rendered manifests/podsecurity/namespace.yaml.tpl -> artifacts/rendered/team-b/podsecurity/namespace.yaml
+[static] Rendered manifests/quota/resourcequota.yaml.tpl -> artifacts/rendered/team-b/quota/resourcequota.yaml
+[static] Rendered manifests/rbac/developer-role.yaml.tpl -> artifacts/rendered/team-b/rbac/developer-role.yaml
+[static] Rendered manifests/rbac/developer-rolebinding.yaml.tpl -> artifacts/rendered/team-b/rbac/developer-rolebinding.yaml
+[static] Rendered manifests/rbac/viewer-rolebinding.yaml.tpl -> artifacts/rendered/team-b/rbac/viewer-rolebinding.yaml
+[static] Rendered manifests/test-workloads/defaulted-pod.yaml.tpl -> artifacts/rendered/team-b/test-workloads/defaulted-pod.yaml
+[static] Rendered manifests/test-workloads/http-server.yaml.tpl -> artifacts/rendered/team-b/test-workloads/http-server.yaml
+[static] Rendered manifests/test-workloads/network-client.yaml.tpl -> artifacts/rendered/team-b/test-workloads/network-client.yaml
+[static] Rendered manifests/test-workloads/normal-deployment.yaml.tpl -> artifacts/rendered/team-b/test-workloads/normal-deployment.yaml
+[static] Rendered manifests/test-workloads/oversized-pod.yaml.tpl -> artifacts/rendered/team-b/test-workloads/oversized-pod.yaml
+[static] Rendered manifests/test-workloads/quota-exceeded-pod.yaml.tpl -> artifacts/rendered/team-b/test-workloads/quota-exceeded-pod.yaml
+[static] Validating rendered YAML with PyYAML
+[static] Parsed 28 rendered YAML files containing 30 YAML documents with PyYAML
+[static] Running optional kubectl client-side dry-run validation
+[static] kubectl is not available; skipping client-side dry-run validation
+[static] Static validation completed successfully
+[static] Log file: artifacts/test-results/static-validation.log

@@ -1,0 +1,24 @@
+name: cloud
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - kubectl
+  - openssl
+  - jq
+  - yq
+  - curl
+  - wget
+  - make
+  - git
+  - pip
+  - pip:
+      - pyyaml
+      - kubernetes
+      - pytest
+
+# The official k3d CLI is intentionally not pinned here because the conda package
+# name `k3d` commonly resolves to an unrelated Jupyter 3D visualization package.
+# In Workflow B, install the real k3d CLI separately if `command -v k3d` is empty:
+#   curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
