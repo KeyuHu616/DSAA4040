@@ -9,10 +9,6 @@ default_bootstrap_kubeconfig() {
     printf '%s\n' "${BOOTSTRAP_KUBECONFIG}"
   elif [[ -n "${KUBECONFIG:-}" && "${KUBECONFIG}" != *:* && -f "${KUBECONFIG}" ]]; then
     printf '%s\n' "${KUBECONFIG}"
-  elif [[ -f "${HOME}/.kube/config" ]]; then
-    printf '%s\n' "${HOME}/.kube/config"
-  elif [[ -f /etc/rancher/k3s/k3s.yaml ]]; then
-    printf '%s\n' "/etc/rancher/k3s/k3s.yaml"
   else
     printf '%s\n' "${HOME}/.kube/config"
   fi
@@ -22,11 +18,30 @@ BOOTSTRAP_KUBECONFIG="$(default_bootstrap_kubeconfig)"
 LIVE_TOOLING_READY=true
 LIVE_CLUSTER_AVAILABLE=false
 DOCKER_ACCESS=false
+K3D_CLUSTER_CONTEXT="${K3D_CLUSTER_CONTEXT:-k3d-dsaa4040-lab}"
+K3D_API_SERVER="${K3D_API_SERVER:-https://127.0.0.1:6550}"
 
 report() {
   local level="$1"
   shift
   printf '[env][%s] %s\n' "${level}" "$*"
+}
+
+fix_k3d_kubeconfig_server() {
+  local current_context current_cluster current_server
+
+  current_context="$(kubectl --kubeconfig "${BOOTSTRAP_KUBECONFIG}" config current-context 2>/dev/null || true)"
+  current_cluster="$(kubectl --kubeconfig "${BOOTSTRAP_KUBECONFIG}" config view --raw --minify -o jsonpath='{.clusters[0].name}' 2>/dev/null || true)"
+  current_server="$(kubectl --kubeconfig "${BOOTSTRAP_KUBECONFIG}" config view --raw --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
+
+  if [[ "${current_server}" == *"0.0.0.0:6550"* ]] && [[ "${current_context}" == "${K3D_CLUSTER_CONTEXT}" || "${current_cluster}" == "${K3D_CLUSTER_CONTEXT}" ]]; then
+    report WARN "bootstrap kubeconfig currently points at ${current_server}; rewriting ${K3D_CLUSTER_CONTEXT} to ${K3D_API_SERVER}"
+    if kubectl config --kubeconfig "${BOOTSTRAP_KUBECONFIG}" set-cluster "${K3D_CLUSTER_CONTEXT}" --server="${K3D_API_SERVER}" >/dev/null 2>&1; then
+      report PASS "rewrote ${K3D_CLUSTER_CONTEXT} server to ${K3D_API_SERVER}"
+    else
+      report WARN "failed to rewrite ${K3D_CLUSTER_CONTEXT}; inspect ${BOOTSTRAP_KUBECONFIG} manually"
+    fi
+  fi
 }
 
 check_command() {
@@ -86,6 +101,7 @@ fi
 if command -v kubectl >/dev/null 2>&1; then
   if [[ -f "${BOOTSTRAP_KUBECONFIG}" ]]; then
     report PASS "bootstrap kubeconfig found at ${BOOTSTRAP_KUBECONFIG}"
+    fix_k3d_kubeconfig_server
     if kubectl --kubeconfig "${BOOTSTRAP_KUBECONFIG}" cluster-info >/dev/null 2>&1; then
       LIVE_CLUSTER_AVAILABLE=true
       report PASS "a live Kubernetes cluster is reachable from ${BOOTSTRAP_KUBECONFIG}"

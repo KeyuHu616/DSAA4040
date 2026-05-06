@@ -81,7 +81,8 @@ command -v k3d >/dev/null 2>&1 || curl -s https://raw.githubusercontent.com/k3d-
 Compatibility note:
 
 - the scripts prefer `BOOTSTRAP_KUBECONFIG`, then `KUBECONFIG`, then `$HOME/.kube/config`
-- `/etc/rancher/k3s/k3s.yaml` is only a final fallback for the optional K3s workflow
+- for the WSL2 + k3d path, keep `BOOTSTRAP_KUBECONFIG="$HOME/.kube/config"`
+- optional K3s users should export `BOOTSTRAP_KUBECONFIG=/etc/rancher/k3s/k3s.yaml` explicitly
 
 Main live workflow:
 
@@ -89,8 +90,9 @@ Main live workflow:
 conda activate cloud
 chmod +x scripts/*.sh
 docker ps
-k3d cluster create dsaa4040-lab
+k3d cluster create dsaa4040-lab --servers 1 --agents 1 --api-port 127.0.0.1:6550 --wait
 k3d kubeconfig merge dsaa4040-lab --kubeconfig-merge-default --kubeconfig-switch-context
+kubectl config set-cluster k3d-dsaa4040-lab --server=https://127.0.0.1:6550
 export BOOTSTRAP_KUBECONFIG="$HOME/.kube/config"
 kubectl get nodes -o wide
 bash scripts/check-environment.sh

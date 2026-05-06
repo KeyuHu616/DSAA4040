@@ -38,8 +38,9 @@ What to say:
 ### 3. Create the k3d Cluster
 
 ```bash
-k3d cluster create dsaa4040-lab
+k3d cluster create dsaa4040-lab --servers 1 --agents 1 --api-port 127.0.0.1:6550 --wait
 k3d kubeconfig merge dsaa4040-lab --kubeconfig-merge-default --kubeconfig-switch-context
+kubectl config set-cluster k3d-dsaa4040-lab --server=https://127.0.0.1:6550
 ```
 
 What to say:

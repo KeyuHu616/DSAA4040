@@ -35,7 +35,9 @@ The tenant scripts prefer:
 1. `BOOTSTRAP_KUBECONFIG`
 2. `KUBECONFIG` when it points to one file
 3. `$HOME/.kube/config`
-4. `/etc/rancher/k3s/k3s.yaml` as a final fallback for K3s users
+
+For the WSL2 + k3d workflow, this means they use `$HOME/.kube/config` by default.
+If you use the optional K3s workflow instead, export `BOOTSTRAP_KUBECONFIG=/etc/rancher/k3s/k3s.yaml` explicitly before running the tenant scripts.
 
 ## Onboard the Required Tenants
 

@@ -50,8 +50,9 @@ From a fresh checkout in WSL2:
 conda activate cloud
 chmod +x scripts/*.sh
 docker ps
-k3d cluster create dsaa4040-lab
+k3d cluster create dsaa4040-lab --servers 1 --agents 1 --api-port 127.0.0.1:6550 --wait
 k3d kubeconfig merge dsaa4040-lab --kubeconfig-merge-default --kubeconfig-switch-context
+kubectl config set-cluster k3d-dsaa4040-lab --server=https://127.0.0.1:6550
 export BOOTSTRAP_KUBECONFIG="$HOME/.kube/config"
 kubectl get nodes -o wide
 bash scripts/check-environment.sh
@@ -70,6 +71,11 @@ What this should do:
 - onboard both required tenants
 - run the live RBAC, resource-governance, and TCP-based network tests
 - save timestamped evidence under `artifacts/test-results/`
+
+Why the explicit server rewrite matters:
+
+- some WSL2/k3d kubeconfigs can expose the API server as `https://0.0.0.0:6550`
+- this repository normalizes that to `https://127.0.0.1:6550` for stable `kubectl` access inside WSL2
 
 ## Static Validation Path
 

@@ -12,10 +12,6 @@ default_bootstrap_kubeconfig() {
     printf '%s\n' "${BOOTSTRAP_KUBECONFIG}"
   elif [[ -n "${KUBECONFIG:-}" && "${KUBECONFIG}" != *:* && -f "${KUBECONFIG}" ]]; then
     printf '%s\n' "${KUBECONFIG}"
-  elif [[ -f "${HOME}/.kube/config" ]]; then
-    printf '%s\n' "${HOME}/.kube/config"
-  elif [[ -f /etc/rancher/k3s/k3s.yaml ]]; then
-    printf '%s\n' "/etc/rancher/k3s/k3s.yaml"
   else
     printf '%s\n' "${HOME}/.kube/config"
   fi

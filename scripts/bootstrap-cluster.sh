@@ -11,6 +11,8 @@ CALICO_MANIFEST_URL="${CALICO_MANIFEST_URL:-https://raw.githubusercontent.com/pr
 MINIKUBE_PROFILE="${MINIKUBE_PROFILE:-dsaa4040}"
 MINIKUBE_DRIVER="${MINIKUBE_DRIVER:-docker}"
 K3D_CLUSTER_NAME="${K3D_CLUSTER_NAME:-dsaa4040-lab}"
+K3D_CLUSTER_CONTEXT="k3d-${K3D_CLUSTER_NAME}"
+K3D_API_PORT="${K3D_API_PORT:-127.0.0.1:6550}"
 
 if [[ "${EUID}" -eq 0 ]]; then
   SUDO=()
@@ -48,11 +50,17 @@ bootstrap_k3d() {
     log "Using existing k3d cluster ${K3D_CLUSTER_NAME}"
   else
     log "Creating k3d cluster ${K3D_CLUSTER_NAME}"
-    k3d cluster create "${K3D_CLUSTER_NAME}" --wait
+    k3d cluster create "${K3D_CLUSTER_NAME}" \
+      --servers 1 \
+      --agents 1 \
+      --api-port "${K3D_API_PORT}" \
+      --wait
   fi
 
   export KUBECONFIG="${HOME}/.kube/config"
   k3d kubeconfig merge "${K3D_CLUSTER_NAME}" --kubeconfig-merge-default --kubeconfig-switch-context >/dev/null
+  kubectl config --kubeconfig "${HOME}/.kube/config" set-cluster "${K3D_CLUSTER_CONTEXT}" --server="https://${K3D_API_PORT}" >/dev/null
+  export BOOTSTRAP_KUBECONFIG="${HOME}/.kube/config"
 
   log "Waiting for k3d cluster nodes to become Ready"
   wait_for_node_ready
