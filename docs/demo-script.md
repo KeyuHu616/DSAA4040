@@ -120,6 +120,26 @@ What to say:
 
 `All grading evidence is written to artifacts/test-results so the result is reproducible and inspectable after the demo.`
 
+## Optional GUI Demo Flow
+
+If you want to show the optional local dashboard after the main CLI demo:
+
+```bash
+streamlit run gui/app.py --server.address 127.0.0.1 --server.port 8501
+```
+
+Then in the browser:
+
+1. open the dashboard at `http://127.0.0.1:8501`
+2. show the Cluster Overview section
+3. show the tenant resource sections for `team-a` and `team-b`
+4. optionally click `Run tests`
+5. show the latest files in the Test Results Viewer
+
+What to say:
+
+`This GUI is only a lightweight local presentation dashboard. It shells out to the existing scripts and reads the saved artifacts without replacing the Kubernetes platform implementation.`
+
 ## Optional Follow-Up Shots
 
 If time allows, show these after the main flow:

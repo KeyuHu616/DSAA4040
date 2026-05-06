@@ -26,6 +26,9 @@
 [static] Required path present: docs/testing-guide.md
 [static] Required path present: docs/demo-script.md
 [static] Required path present: docs/ha-discussion.md
+[static] Required path present: gui
+[static] Required path present: gui/app.py
+[static] Required path present: gui/README.md
 [static] Required path present: manifests/rbac
 [static] Required path present: manifests/quota
 [static] Required path present: manifests/limitrange

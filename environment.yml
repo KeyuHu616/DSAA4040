@@ -12,6 +12,7 @@ dependencies:
   - wget
   - make
   - git
+  - streamlit
   - pip
   - pip:
       - pyyaml

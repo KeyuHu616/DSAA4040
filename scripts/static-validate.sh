@@ -39,6 +39,9 @@ check_required_paths() {
     docs/testing-guide.md
     docs/demo-script.md
     docs/ha-discussion.md
+    gui
+    gui/app.py
+    gui/README.md
     manifests/rbac
     manifests/quota
     manifests/limitrange
