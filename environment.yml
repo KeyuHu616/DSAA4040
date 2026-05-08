@@ -17,6 +17,9 @@ dependencies:
   - pip:
       - pyyaml
       - kubernetes
+      - fastapi
+      - uvicorn
+      - httpx
       - pytest
 
 # The official k3d CLI is intentionally not pinned here because the conda package

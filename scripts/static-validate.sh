@@ -39,6 +39,14 @@ check_required_paths() {
     docs/testing-guide.md
     docs/demo-script.md
     docs/ha-discussion.md
+    docs/gui-backend-guide.md
+    backend
+    backend/app
+    backend/app/main.py
+    backend/tests
+    frontend
+    frontend/package.json
+    Makefile
     gui
     gui/app.py
     gui/README.md
@@ -130,6 +138,44 @@ optional_kubectl_dry_run() {
   done < <(find "${RENDER_ROOT}" -type f -name '*.yaml' | sort)
 }
 
+validate_backend_python() {
+  if [[ ! -d backend ]]; then
+    log "backend directory not present; skipping backend validation"
+    return 0
+  fi
+
+  need_cmd python3
+
+  log "Compiling backend Python package"
+  python3 -m compileall backend
+
+  log "Running backend unit tests"
+  python3 -m unittest discover -s backend/tests -v
+}
+
+validate_frontend_build() {
+  if [[ ! -d frontend ]]; then
+    log "frontend directory not present; skipping frontend validation"
+    return 0
+  fi
+
+  if ! command -v npm >/dev/null 2>&1; then
+    log "npm is not available; skipping frontend build validation"
+    return 0
+  fi
+
+  if [[ -f frontend/package-lock.json ]]; then
+    log "Installing frontend dependencies with npm ci"
+    (
+      cd frontend
+      npm ci --no-fund --no-audit
+      npm run build
+    )
+  else
+    log "frontend/package-lock.json is missing; skipping npm ci and build"
+  fi
+}
+
 log "Starting static validation"
 
 if [[ -x scripts/check-environment.sh ]]; then
@@ -157,6 +203,12 @@ validate_yaml_with_python
 
 log "Running optional kubectl client-side dry-run validation"
 optional_kubectl_dry_run
+
+log "Validating backend Python code"
+validate_backend_python
+
+log "Validating frontend build"
+validate_frontend_build
 
 log "Static validation completed successfully"
 log "Log file: ${LOG_FILE}"

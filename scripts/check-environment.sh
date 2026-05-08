@@ -77,6 +77,14 @@ for cmd in kubectl openssl jq yq curl wget; do
   check_command "${cmd}" || true
 done
 
+for cmd in node npm; do
+  if command -v "${cmd}" >/dev/null 2>&1; then
+    report PASS "${cmd} found at $(command -v "${cmd}")"
+  else
+    report WARN "${cmd} is not available; local frontend build and UI validation will be unavailable"
+  fi
+done
+
 if command -v docker >/dev/null 2>&1; then
   if docker ps >/dev/null 2>&1; then
     DOCKER_ACCESS=true

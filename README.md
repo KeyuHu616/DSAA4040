@@ -151,6 +151,51 @@ The GUI intentionally does not:
 - offer cluster deletion buttons
 - offer offboarding buttons by default
 
+## Local Web Management Layer
+
+This repository also includes an optional localhost-only web management layer:
+
+- `backend/`: FastAPI backend for safe local orchestration and read-only cluster inspection
+- `frontend/`: React + Vite + TypeScript + Tailwind frontend for demos and local operation
+
+This web layer does not replace Kubernetes-native enforcement. RBAC, `ResourceQuota`, `LimitRange`, `NetworkPolicy`, and Pod Security controls still come from the cluster and existing repository scripts.
+
+Prepare the environment:
+
+```bash
+conda env update -f environment.yml --prune
+conda activate cloud
+chmod +x scripts/*.sh
+```
+
+Start the local backend and frontend together:
+
+```bash
+make dev
+```
+
+Or start them separately:
+
+```bash
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+cd frontend
+npm ci
+npm run dev
+```
+
+Open:
+
+```text
+Frontend: http://127.0.0.1:5173
+Backend OpenAPI docs: http://127.0.0.1:8000/docs
+```
+
+If `kubectl` or a live cluster is unavailable, the web UI still loads in local demo mode and surfaces controlled unavailable states instead of replacing or bypassing the existing shell workflow.
+
+For the detailed backend/frontend workflow, see:
+
+- [Local Web Guide](docs/gui-backend-guide.md)
+
 ## Test Artifacts
 
 Static validation log:
@@ -178,3 +223,4 @@ Rendered manifests for static checks:
 - [Architecture](docs/architecture.md)
 - [RBAC Matrix](docs/rbac-matrix.md)
 - [HA Discussion](docs/ha-discussion.md)
+- [Local Web Guide](docs/gui-backend-guide.md)
