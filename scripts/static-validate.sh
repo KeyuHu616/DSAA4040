@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
+source "${ROOT_DIR}/scripts/lib-kubeconfig.sh"
+
+BOOTSTRAP_KUBECONFIG="$(default_bootstrap_kubeconfig)"
 LOG_FILE="artifacts/test-results/static-validation.log"
 RENDER_ROOT="artifacts/rendered"
 
@@ -30,6 +33,7 @@ check_required_paths() {
   local path
   local required_paths=(
     README.md
+    report.md
     AGENTS.md
     environment.yml
     docs/proposal.md
@@ -39,17 +43,7 @@ check_required_paths() {
     docs/testing-guide.md
     docs/demo-script.md
     docs/ha-discussion.md
-    docs/gui-backend-guide.md
-    backend
-    backend/app
-    backend/app/main.py
-    backend/tests
-    frontend
-    frontend/package.json
     Makefile
-    gui
-    gui/app.py
-    gui/README.md
     manifests/rbac
     manifests/quota
     manifests/limitrange
@@ -61,6 +55,7 @@ check_required_paths() {
     scripts/onboard-team.sh
     scripts/offboard-team.sh
     scripts/issue-user-kubeconfig.sh
+    scripts/lib-kubeconfig.sh
     scripts/static-validate.sh
     scripts/run-tests.sh
     artifacts/kubeconfigs
@@ -124,6 +119,59 @@ print(f"[static] Parsed {len(files)} rendered YAML files containing {doc_count} 
 PY
 }
 
+validate_rendered_workload_security() {
+  need_cmd python3
+
+  python3 - <<'PY'
+from pathlib import Path
+import sys
+import yaml
+
+workloads = [
+    Path("artifacts/rendered/team-a/test-workloads/defaulted-pod.yaml"),
+    Path("artifacts/rendered/team-a/test-workloads/http-server.yaml"),
+    Path("artifacts/rendered/team-a/test-workloads/network-client.yaml"),
+    Path("artifacts/rendered/team-a/test-workloads/normal-deployment.yaml"),
+    Path("artifacts/rendered/team-a/test-workloads/oversized-pod.yaml"),
+    Path("artifacts/rendered/team-a/test-workloads/quota-exceeded-pod.yaml"),
+]
+
+def pod_spec(doc):
+    kind = doc["kind"]
+    if kind == "Pod":
+        return doc["spec"]
+    if kind == "Deployment":
+        return doc["spec"]["template"]["spec"]
+    return None
+
+for path in workloads:
+    docs = [doc for doc in yaml.safe_load_all(path.read_text(encoding="utf-8")) if doc]
+    for doc in docs:
+        spec = pod_spec(doc)
+        if spec is None:
+            continue
+        pod_sc = spec.get("securityContext", {})
+        if pod_sc.get("runAsNonRoot") is not True:
+            print(f"[static] ERROR: {path} is missing securityContext.runAsNonRoot=true")
+            sys.exit(1)
+        seccomp_type = ((pod_sc.get("seccompProfile") or {}).get("type"))
+        if seccomp_type != "RuntimeDefault":
+            print(f"[static] ERROR: {path} is missing seccompProfile.type=RuntimeDefault")
+            sys.exit(1)
+        for container in spec.get("containers", []):
+            security = container.get("securityContext", {})
+            if security.get("allowPrivilegeEscalation") is not False:
+                print(f"[static] ERROR: {path} container {container['name']} must set allowPrivilegeEscalation=false")
+                sys.exit(1)
+            drops = ((security.get("capabilities") or {}).get("drop")) or []
+            if "ALL" not in drops:
+                print(f"[static] ERROR: {path} container {container['name']} must drop ALL capabilities")
+                sys.exit(1)
+
+print("[static] Rendered workload security contexts meet the repository baseline")
+PY
+}
+
 optional_kubectl_dry_run() {
   local file
 
@@ -132,48 +180,16 @@ optional_kubectl_dry_run() {
     return 0
   fi
 
+  normalize_loopback_server "${BOOTSTRAP_KUBECONFIG}" >/dev/null || true
+  if ! cluster_reachable "${BOOTSTRAP_KUBECONFIG}"; then
+    log "no live cluster is reachable through ${BOOTSTRAP_KUBECONFIG}; skipping kubectl client dry-run validation"
+    return 0
+  fi
+
   while IFS= read -r file; do
     kubectl apply --dry-run=client --validate=false -f "${file}" >/dev/null
     log "kubectl client dry-run passed for ${file}"
   done < <(find "${RENDER_ROOT}" -type f -name '*.yaml' | sort)
-}
-
-validate_backend_python() {
-  if [[ ! -d backend ]]; then
-    log "backend directory not present; skipping backend validation"
-    return 0
-  fi
-
-  need_cmd python3
-
-  log "Compiling backend Python package"
-  python3 -m compileall backend
-
-  log "Running backend unit tests"
-  python3 -m unittest discover -s backend/tests -v
-}
-
-validate_frontend_build() {
-  if [[ ! -d frontend ]]; then
-    log "frontend directory not present; skipping frontend validation"
-    return 0
-  fi
-
-  if ! command -v npm >/dev/null 2>&1; then
-    log "npm is not available; skipping frontend build validation"
-    return 0
-  fi
-
-  if [[ -f frontend/package-lock.json ]]; then
-    log "Installing frontend dependencies with npm ci"
-    (
-      cd frontend
-      npm ci --no-fund --no-audit
-      npm run build
-    )
-  else
-    log "frontend/package-lock.json is missing; skipping npm ci and build"
-  fi
 }
 
 log "Starting static validation"
@@ -195,20 +211,18 @@ check_required_paths
 log "Refreshing rendered manifests under ${RENDER_ROOT}"
 rm -rf "${RENDER_ROOT}"
 mkdir -p "${RENDER_ROOT}"
+touch "${RENDER_ROOT}/.gitkeep"
 render_templates team-a
 render_templates team-b
 
 log "Validating rendered YAML with PyYAML"
 validate_yaml_with_python
 
+log "Validating rendered workload security contexts"
+validate_rendered_workload_security
+
 log "Running optional kubectl client-side dry-run validation"
 optional_kubectl_dry_run
-
-log "Validating backend Python code"
-validate_backend_python
-
-log "Validating frontend build"
-validate_frontend_build
 
 log "Static validation completed successfully"
 log "Log file: ${LOG_FILE}"

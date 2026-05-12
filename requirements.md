@@ -1,4 +1,3 @@
-
 DSAA 4040 Course Project Handout
 Cloud Computing & Big Data Systems
 Instructor: Guoming Tang

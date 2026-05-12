@@ -1,7 +1,16 @@
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 
-frontend/node_modules/
-frontend/dist/
-frontend/*.tsbuildinfo
+artifacts/kubeconfigs/*
+!artifacts/kubeconfigs/.gitkeep
+artifacts/rendered/*
+!artifacts/rendered/.gitkeep
+artifacts/test-results/*
+!artifacts/test-results/.gitkeep
+
+*.key
+*.crt
+*.csr
+*.kubeconfig

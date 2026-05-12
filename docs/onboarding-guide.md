@@ -2,118 +2,107 @@
 
 ## Goal
 
-This guide describes how to create tenant namespaces and issue working kubeconfigs for tenant users with the provided automation.
+This guide explains how to onboard a tenant namespace and generate working kubeconfigs for the tenant developer and viewer users.
 
 ## Prerequisites
 
-- a running Kubernetes cluster
-- NetworkPolicy enforcement enabled by the CNI
+- a reachable Kubernetes cluster
+- NetworkPolicy enforcement enabled in the cluster runtime
 - an admin kubeconfig
 - `kubectl`
 - `openssl`
 
-If you are using K3s, the default admin kubeconfig is usually:
-
-```bash
-export BOOTSTRAP_KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-```
-
-If you are using Minikube:
+For the recommended `k3d` workflow:
 
 ```bash
 export BOOTSTRAP_KUBECONFIG="$HOME/.kube/config"
 ```
 
-If you are using the recommended WSL2 + k3d live workflow:
-
-```bash
-export BOOTSTRAP_KUBECONFIG="$HOME/.kube/config"
-```
-
-The tenant scripts prefer:
+The scripts resolve the bootstrap kubeconfig in this order:
 
 1. `BOOTSTRAP_KUBECONFIG`
 2. `KUBECONFIG` when it points to one file
 3. `$HOME/.kube/config`
 
-For the WSL2 + k3d workflow, this means they use `$HOME/.kube/config` by default.
-If you use the optional K3s workflow instead, export `BOOTSTRAP_KUBECONFIG=/etc/rancher/k3s/k3s.yaml` explicitly before running the tenant scripts.
-
-## Onboard the Required Tenants
+## Required Tenants
 
 ```bash
-./scripts/onboard-team.sh team-a
-./scripts/onboard-team.sh team-b
+bash scripts/onboard-team.sh team-a
+bash scripts/onboard-team.sh team-b
 ```
 
-The script is idempotent. Re-running it refreshes tenant labels, policies, and user kubeconfigs.
+The onboarding script is idempotent. Re-running it refreshes namespace labels, policy objects, and generated kubeconfigs.
 
-## What the Script Applies
+## What Onboarding Applies
 
-For the requested team, the script:
+For each tenant, the script applies:
 
-1. Applies the namespace manifest from `manifests/podsecurity/namespace.yaml.tpl`.
-2. Applies the developer `Role` from `manifests/rbac/developer-role.yaml.tpl`.
-3. Applies the developer `RoleBinding`.
-4. Applies the viewer `RoleBinding`.
-5. Applies the tenant `ResourceQuota`.
-6. Applies the tenant `LimitRange`.
-7. Applies the tenant `NetworkPolicy` objects.
-8. Calls `scripts/issue-user-kubeconfig.sh` for `developer` and `viewer`.
+1. namespace creation and labels
+2. Pod Security Admission labels
+3. the developer `Role`
+4. the developer `RoleBinding`
+5. the viewer `RoleBinding`
+6. the tenant `ResourceQuota`
+7. the tenant `LimitRange`
+8. the tenant `NetworkPolicy` objects
+9. developer and viewer kubeconfigs
 
-## Generated Artifacts
+## Generated Files
 
-The public kubeconfig files required by the assignment are:
+The public kubeconfig outputs are:
 
 - `artifacts/kubeconfigs/team-a-developer.kubeconfig`
 - `artifacts/kubeconfigs/team-a-viewer.kubeconfig`
 - `artifacts/kubeconfigs/team-b-developer.kubeconfig`
 - `artifacts/kubeconfigs/team-b-viewer.kubeconfig`
 
-Supporting certificate material is stored under:
+Supporting key and certificate material is written under:
 
 ```text
 artifacts/kubeconfigs/.generated/
 ```
 
-## Verification Commands
+## Verification
 
-Check the namespace labels:
+Check namespace labels:
 
 ```bash
 kubectl --kubeconfig "$BOOTSTRAP_KUBECONFIG" get namespace team-a --show-labels
 kubectl --kubeconfig "$BOOTSTRAP_KUBECONFIG" get namespace team-b --show-labels
 ```
 
-Check the tenant control objects:
+Check tenant isolation objects:
 
 ```bash
 kubectl --kubeconfig "$BOOTSTRAP_KUBECONFIG" get resourcequota -n team-a
 kubectl --kubeconfig "$BOOTSTRAP_KUBECONFIG" get limitrange -n team-a
 kubectl --kubeconfig "$BOOTSTRAP_KUBECONFIG" get networkpolicy -n team-a
+kubectl --kubeconfig "$BOOTSTRAP_KUBECONFIG" get rolebinding -n team-a
 ```
 
-Check the issued user identity:
+Check kubeconfig default namespaces:
+
+```bash
+kubectl config view --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig --minify -o jsonpath='{.contexts[0].context.namespace}'; echo
+kubectl config view --kubeconfig artifacts/kubeconfigs/team-a-viewer.kubeconfig --minify -o jsonpath='{.contexts[0].context.namespace}'; echo
+```
+
+Check identity resolution:
 
 ```bash
 kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig auth whoami
 kubectl --kubeconfig artifacts/kubeconfigs/team-a-viewer.kubeconfig auth whoami
 ```
 
-## Onboarding Another Team
+## Additional Tenants
 
 The same script can onboard another namespace-shaped tenant:
 
 ```bash
-./scripts/onboard-team.sh team-c
+bash scripts/onboard-team.sh team-c
 ```
 
-The generated users will be:
+The generated users will follow the same convention:
 
 - `team-c-developer`
 - `team-c-viewer`
-
-Their certificate subjects will be:
-
-- `CN=team-c-developer, O=team-c`
-- `CN=team-c-viewer, O=team-c`

@@ -1,23 +1,25 @@
-.PHONY: backend-dev frontend-dev dev backend-tests frontend-build web-validate
+.PHONY: check-environment static-validate bootstrap onboard-team-a onboard-team-b offboard-team-a offboard-team-b test
 
-backend-dev:
-	python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+check-environment:
+	bash scripts/check-environment.sh
 
-frontend-dev:
-	cd frontend && npm run dev
+static-validate:
+	bash scripts/static-validate.sh
 
-dev:
-	@trap 'kill 0' EXIT; \
-	python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload & \
-	cd frontend && npm run dev
+bootstrap:
+	bash scripts/bootstrap-cluster.sh
 
-backend-tests:
-	python -m unittest discover -s backend/tests -v
+onboard-team-a:
+	bash scripts/onboard-team.sh team-a
 
-frontend-build:
-	cd frontend && npm run build
+onboard-team-b:
+	bash scripts/onboard-team.sh team-b
 
-web-validate:
-	python -m compileall backend
-	python -m unittest discover -s backend/tests -v
-	cd frontend && npm run build
+offboard-team-a:
+	bash scripts/offboard-team.sh team-a
+
+offboard-team-b:
+	bash scripts/offboard-team.sh team-b
+
+test:
+	bash scripts/run-tests.sh

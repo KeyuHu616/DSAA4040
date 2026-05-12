@@ -1,34 +1,50 @@
-# DSAA4040 E3 Kubernetes Multi-Tenant Lab Platform
+# DSAA4040 E3 Multi-Tenant Kubernetes Lab Platform
 
-This repository implements the DSAA4040 E3 namespace-based soft multi-tenant Kubernetes lab platform.
+This repository contains a submission-focused implementation of the DSAA 4040 Engineering Project E3:
 
-The core platform remains unchanged:
+**Design and Implement a Multi-Tenant Kubernetes Lab Platform with RBAC and Resource Isolation**
 
-- RBAC for `developer` and `viewer`
-- CSR-based users and generated kubeconfigs
-- `ResourceQuota`
-- `LimitRange`
-- `NetworkPolicy`
-- Pod Security labels
-- onboarding and offboarding scripts
-- automated tests and saved artifacts
+The platform is intentionally scoped as a **namespace-based soft multi-tenant lab** for teaching and grading. It demonstrates:
 
-The required tenants are:
+- three roles: platform admin, tenant developer, tenant viewer
+- per-team namespaces for `team-a` and `team-b`
+- tenant-local RBAC without `ClusterRoleBinding` for tenant users
+- `ResourceQuota` and `LimitRange`
+- enforced `NetworkPolicy`
+- Pod Security Admission labels
+- automated onboarding, offboarding, kubeconfig issuance, and testing
 
-- `team-a`
-- `team-b`
+## Repository Layout
 
-## Recommended Live Validation Environment
+```text
+.
+├── README.md
+├── report.md
+├── AGENTS.md
+├── requirements.md
+├── environment.yml
+├── Makefile
+├── docs/
+├── manifests/
+├── scripts/
+└── artifacts/
+```
 
-The recommended live environment is:
+## Recommended Environment
 
-- Windows
+Primary validated workflow:
+
+- Windows host
 - WSL2 Ubuntu
 - Docker Desktop with WSL integration enabled
 - Conda environment `cloud`
-- k3d cluster `dsaa4040-lab`
+- `k3d` cluster backed by K3s
 
-Create or update the Conda environment:
+The repository also keeps script-level support for direct `k3s` or `minikube`, but the recommended grading path is the `k3d` workflow because it is the simplest to reproduce.
+
+## Prerequisites
+
+Create or refresh the Conda environment:
 
 ```bash
 conda env create -f environment.yml || conda env update -f environment.yml --prune
@@ -36,173 +52,179 @@ conda activate cloud
 chmod +x scripts/*.sh
 ```
 
-If `k3d` is missing, install it once:
+Required tools for the main workflow:
+
+- `kubectl`
+- `openssl`
+- `curl`
+- `wget`
+- Docker Desktop access from WSL2
+- `k3d`
+
+Install `k3d` once if needed:
 
 ```bash
 command -v k3d >/dev/null 2>&1 || curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 ```
 
-## Live Deployment Path
+## Fast Reproduction
 
-From a fresh checkout in WSL2:
+Run the complete grading path from the repository root:
 
 ```bash
 conda activate cloud
 chmod +x scripts/*.sh
-docker ps
-k3d cluster create dsaa4040-lab --servers 1 --agents 1 --api-port 127.0.0.1:6550 --wait
-k3d kubeconfig merge dsaa4040-lab --kubeconfig-merge-default --kubeconfig-switch-context
-kubectl config set-cluster k3d-dsaa4040-lab --server=https://127.0.0.1:6550
-export BOOTSTRAP_KUBECONFIG="$HOME/.kube/config"
-kubectl get nodes -o wide
 bash scripts/check-environment.sh
 bash scripts/bootstrap-cluster.sh
 bash scripts/onboard-team.sh team-a
 bash scripts/onboard-team.sh team-b
 bash scripts/run-tests.sh
-ls -1dt artifacts/test-results/*
 ```
 
-What this should do:
+Expected outcome:
 
-- confirm Docker access
-- create or connect to the k3d cluster
-- point `kubectl` and the repo scripts at `$HOME/.kube/config`
-- onboard both required tenants
-- run the live RBAC, resource-governance, and TCP-based network tests
-- save timestamped evidence under `artifacts/test-results/`
+- a reachable single-node `k3d` Kubernetes lab cluster
+- onboarded namespaces `team-a` and `team-b`
+- generated tenant kubeconfigs under `artifacts/kubeconfigs/`
+- rendered manifests under `artifacts/rendered/`
+- automated test evidence under `artifacts/test-results/`
 
-Why the explicit server rewrite matters:
+## What Each Script Does
 
-- some WSL2/k3d kubeconfigs can expose the API server as `https://0.0.0.0:6550`
-- this repository normalizes that to `https://127.0.0.1:6550` for stable `kubectl` access inside WSL2
+`scripts/check-environment.sh`
 
-## Static Validation Path
+- verifies the active Conda environment
+- checks required command availability
+- reports whether Docker and a live Kubernetes cluster are reachable
 
-On a no-sudo Linux server used only for coding and static checks:
+`scripts/bootstrap-cluster.sh`
+
+- defaults to the `k3d` runtime
+- creates or reuses the `dsaa4040-lab` cluster
+- merges the cluster kubeconfig into `$HOME/.kube/config`
+- normalizes the API server address for WSL2 loopback access
+
+`scripts/onboard-team.sh <team>`
+
+- creates the namespace if needed
+- applies namespace labels and Pod Security labels
+- applies RBAC, `ResourceQuota`, `LimitRange`, and `NetworkPolicy`
+- issues or refreshes the developer and viewer kubeconfigs
+
+`scripts/offboard-team.sh <team>`
+
+- deletes the tenant namespace
+- deletes related CSRs
+- removes generated local kubeconfig artifacts for that tenant
+
+`scripts/run-tests.sh`
+
+- runs static validation first
+- runs live RBAC, resource-governance, and TCP-based network tests when a cluster is reachable
+- writes timestamped evidence files into `artifacts/test-results/`
+
+## Generated Kubeconfigs
+
+After onboarding, the repository generates:
+
+- `artifacts/kubeconfigs/team-a-developer.kubeconfig`
+- `artifacts/kubeconfigs/team-a-viewer.kubeconfig`
+- `artifacts/kubeconfigs/team-b-developer.kubeconfig`
+- `artifacts/kubeconfigs/team-b-viewer.kubeconfig`
+
+The kubeconfigs default to the user namespace and use CSR-issued client certificates with these identity conventions:
+
+- `CN=<team>-developer, O=<team>`
+- `CN=<team>-viewer, O=<team>`
+
+Quick usage examples:
 
 ```bash
-conda activate cloud
-chmod +x scripts/*.sh
-bash scripts/check-environment.sh
-bash scripts/static-validate.sh
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig get pods
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-viewer.kubeconfig get services
+```
+
+## RBAC Validation Commands
+
+Developer A allowed:
+
+```bash
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig auth can-i create deployments -n team-a
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig auth can-i get pods -n team-a
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig auth can-i get pods/log -n team-a
+```
+
+Developer A denied:
+
+```bash
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig auth can-i get pods -n team-b
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig auth can-i create deployments -n team-b
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig auth can-i update resourcequotas -n team-a
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig auth can-i update networkpolicies -n team-a
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig auth can-i create rolebindings -n team-a
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig auth can-i patch namespaces team-a
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig auth can-i get secrets -n team-a
+```
+
+Viewer A allowed and denied:
+
+```bash
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-viewer.kubeconfig auth can-i get pods -n team-a
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-viewer.kubeconfig auth can-i list services -n team-a
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-viewer.kubeconfig auth can-i create deployments -n team-a
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-viewer.kubeconfig auth can-i delete pods -n team-a
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-viewer.kubeconfig auth can-i get pods -n team-b
+kubectl --kubeconfig artifacts/kubeconfigs/team-a-viewer.kubeconfig auth can-i get secrets -n team-a
+```
+
+## Quota and LimitRange Validation
+
+Run the automated suite:
+
+```bash
 bash scripts/run-tests.sh
+```
+
+Or inspect the live result files:
+
+```bash
+LATEST_RESULT="$(ls -1dt artifacts/test-results/* | head -n 1)"
+cat "${LATEST_RESULT}/resource-tests.txt"
+```
+
+The resource tests demonstrate:
+
+- a normal workload is admitted
+- default requests and limits are injected
+- an oversized workload is rejected by `LimitRange`
+- a quota-exceeding workload is rejected by `ResourceQuota`
+
+## NetworkPolicy Validation
+
+The automated suite deploys one HTTP server and one client pod in each tenant and validates TCP reachability with `wget`.
+
+Manual spot checks:
+
+```bash
+kubectl --kubeconfig "$HOME/.kube/config" exec -n team-a network-client -- \
+  wget -q -T 5 -O - http://http-echo.team-a.svc.cluster.local
+
+kubectl --kubeconfig "$HOME/.kube/config" exec -n team-a network-client -- \
+  wget -q -T 5 -O - http://http-echo.team-b.svc.cluster.local
 ```
 
 Expected behavior:
 
-- static validation completes
-- `bash scripts/run-tests.sh` falls back cleanly when no real cluster is reachable
-- it prints:
+- same-namespace HTTP succeeds
+- cross-namespace HTTP fails
 
-```text
-Static validation completed; live Kubernetes validation is pending on WSL2 or another Docker/Kubernetes-enabled machine.
-```
+## Test Evidence
 
-## Optional GUI Dashboard
-
-This project includes an optional local Streamlit dashboard for presentation demos.
-
-Warning:
-
-- this is a local demo dashboard only
-- it is not a production portal
-- it should be bound only to `127.0.0.1`
-
-If your existing Conda environment was created before `streamlit` was added, update it:
-
-```bash
-conda env update -f environment.yml --prune
-```
-
-If you prefer a targeted install instead:
-
-```bash
-pip install streamlit
-```
-
-Start the GUI:
-
-```bash
-conda activate cloud
-streamlit run gui/app.py --server.address 127.0.0.1 --server.port 8501
-```
-
-Open:
-
-```text
-http://127.0.0.1:8501
-```
-
-The GUI can show:
-
-- cluster overview with `kubectl get nodes -o wide` and `kubectl get ns`
-- whether `team-a` and `team-b` exist
-- per-tenant quota, limit range, network policy, and rolebinding summaries
-- generated kubeconfig filenames and user names
-- buttons for `check-environment`, `bootstrap-cluster`, `onboard-team.sh team-a`, `onboard-team.sh team-b`, and `run-tests.sh`
-- latest timestamped test-results files
-- a demo checklist
-
-The GUI intentionally does not:
-
-- expose private key contents
-- bind to `0.0.0.0` by default
-- offer cluster deletion buttons
-- offer offboarding buttons by default
-
-## Local Web Management Layer
-
-This repository also includes an optional localhost-only web management layer:
-
-- `backend/`: FastAPI backend for safe local orchestration and read-only cluster inspection
-- `frontend/`: React + Vite + TypeScript + Tailwind frontend for demos and local operation
-
-This web layer does not replace Kubernetes-native enforcement. RBAC, `ResourceQuota`, `LimitRange`, `NetworkPolicy`, and Pod Security controls still come from the cluster and existing repository scripts.
-
-Prepare the environment:
-
-```bash
-conda env update -f environment.yml --prune
-conda activate cloud
-chmod +x scripts/*.sh
-```
-
-Start the local backend and frontend together:
-
-```bash
-make dev
-```
-
-Or start them separately:
-
-```bash
-python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
-cd frontend
-npm ci
-npm run dev
-```
-
-Open:
-
-```text
-Frontend: http://127.0.0.1:5173
-Backend OpenAPI docs: http://127.0.0.1:8000/docs
-```
-
-If `kubectl` or a live cluster is unavailable, the web UI still loads in local demo mode and surfaces controlled unavailable states instead of replacing or bypassing the existing shell workflow.
-
-For the detailed backend/frontend workflow, see:
-
-- [Local Web Guide](docs/gui-backend-guide.md)
-
-## Test Artifacts
-
-Static validation log:
+Static validation output:
 
 - `artifacts/test-results/static-validation.log`
 
-Live test runs:
+Live validation output:
 
 - `artifacts/test-results/<timestamp>/summary.txt`
 - `artifacts/test-results/<timestamp>/rbac-tests.txt`
@@ -210,17 +232,54 @@ Live test runs:
 - `artifacts/test-results/<timestamp>/network-tests.txt`
 - `artifacts/test-results/<timestamp>/cluster-state.txt`
 
-Rendered manifests for static checks:
+## Cleanup
 
-- `artifacts/rendered/team-a/...`
-- `artifacts/rendered/team-b/...`
+Remove tenants only:
 
-## Related Docs
+```bash
+bash scripts/offboard-team.sh team-a
+bash scripts/offboard-team.sh team-b
+```
 
-- [Onboarding Guide](docs/onboarding-guide.md)
-- [Testing Guide](docs/testing-guide.md)
-- [Demo Script](docs/demo-script.md)
-- [Architecture](docs/architecture.md)
-- [RBAC Matrix](docs/rbac-matrix.md)
-- [HA Discussion](docs/ha-discussion.md)
-- [Local Web Guide](docs/gui-backend-guide.md)
+Delete the lab cluster when you are done:
+
+```bash
+k3d cluster delete dsaa4040-lab
+```
+
+## Troubleshooting
+
+`docker ps` fails inside WSL2
+
+- Start Docker Desktop on Windows.
+- Enable WSL integration for the Ubuntu distribution you are using.
+- Re-open the WSL shell and rerun `bash scripts/check-environment.sh`.
+
+`k3d` is missing
+
+- Install it with the official script shown above.
+
+`kubectl` points to `https://0.0.0.0:<port>`
+
+- Rerun `bash scripts/bootstrap-cluster.sh`.
+- The repository normalizes the cluster server to `https://127.0.0.1:<port>` for WSL2 compatibility.
+
+Live tests are skipped
+
+- `scripts/run-tests.sh` skips live validation if no reachable cluster is detected.
+- Use `bash scripts/check-environment.sh` first and confirm that both Docker and the cluster are reachable.
+
+Pod admission warnings appear
+
+- The test workloads in this repository already set `runAsNonRoot`, `seccompProfile`, and dropped Linux capabilities.
+- If you add your own workloads, keep the same security context style to stay aligned with Pod Security Admission.
+
+## Deliverables in This Repository
+
+- source code and Kubernetes configuration: `manifests/`, `scripts/`, and supporting docs
+- report source: `report.md`
+- proposal source: `docs/proposal.md`
+- demo script: `docs/demo-script.md`
+- reproduction guide: this `README.md`
+
+To submit the report as a PDF, export `report.md` through your preferred Markdown-to-PDF workflow.

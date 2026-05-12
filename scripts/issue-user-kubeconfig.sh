@@ -4,18 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
+source "${ROOT_DIR}/scripts/lib-kubeconfig.sh"
+
 TEAM="${1:?usage: issue-user-kubeconfig.sh <team> <developer|viewer>}"
 ROLE="${2:?usage: issue-user-kubeconfig.sh <team> <developer|viewer>}"
-
-default_bootstrap_kubeconfig() {
-  if [[ -n "${BOOTSTRAP_KUBECONFIG:-}" ]]; then
-    printf '%s\n' "${BOOTSTRAP_KUBECONFIG}"
-  elif [[ -n "${KUBECONFIG:-}" && "${KUBECONFIG}" != *:* && -f "${KUBECONFIG}" ]]; then
-    printf '%s\n' "${KUBECONFIG}"
-  else
-    printf '%s\n' "${HOME}/.kube/config"
-  fi
-}
 
 BOOTSTRAP_KUBECONFIG="$(default_bootstrap_kubeconfig)"
 USERNAME="${TEAM}-${ROLE}"

@@ -15,14 +15,29 @@ spec:
       labels:
         app: http-echo
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: http-echo
-          image: hashicorp/http-echo:0.2.3
-          args:
-            - -text=hello from __TEAM__
+          image: busybox:1.36.1
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /tmp/www
+              printf 'hello from __TEAM__\n' > /tmp/www/index.html
+              exec httpd -f -p 5678 -h /tmp/www
           ports:
             - containerPort: 5678
               name: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           resources:
             requests:
               cpu: 100m

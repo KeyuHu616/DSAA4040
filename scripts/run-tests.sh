@@ -4,30 +4,21 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
-default_bootstrap_kubeconfig() {
-  if [[ -n "${BOOTSTRAP_KUBECONFIG:-}" ]]; then
-    printf '%s\n' "${BOOTSTRAP_KUBECONFIG}"
-  elif [[ -n "${KUBECONFIG:-}" && "${KUBECONFIG}" != *:* && -f "${KUBECONFIG}" ]]; then
-    printf '%s\n' "${KUBECONFIG}"
-  else
-    printf '%s\n' "${HOME}/.kube/config"
-  fi
-}
+source "${ROOT_DIR}/scripts/lib-kubeconfig.sh"
 
 BOOTSTRAP_KUBECONFIG="$(default_bootstrap_kubeconfig)"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-RESULT_DIR="artifacts/test-results/${TIMESTAMP}"
-RENDER_DIR="${RESULT_DIR}/rendered"
-SUMMARY_FILE="${RESULT_DIR}/summary.txt"
-RBAC_LOG="${RESULT_DIR}/rbac-tests.txt"
-RESOURCE_LOG="${RESULT_DIR}/resource-tests.txt"
-NETWORK_LOG="${RESULT_DIR}/network-tests.txt"
-CLUSTER_LOG="${RESULT_DIR}/cluster-state.txt"
+RESULT_DIR=""
+RENDER_DIR=""
+SUMMARY_FILE=""
+RBAC_LOG=""
+RESOURCE_LOG=""
+NETWORK_LOG=""
+CLUSTER_LOG=""
+FINAL_SUMMARY_WRITTEN=false
 
 PASS_COUNT=0
 FAIL_COUNT=0
-
-mkdir -p "${RESULT_DIR}" "${RENDER_DIR}"
 
 log() {
   printf '[tests] %s\n' "$*"
@@ -38,6 +29,57 @@ die() {
   exit 1
 }
 
+init_result_dir() {
+  if [[ -n "${RESULT_DIR}" ]]; then
+    return 0
+  fi
+
+  RESULT_DIR="artifacts/test-results/${TIMESTAMP}"
+  RENDER_DIR="${RESULT_DIR}/rendered"
+  SUMMARY_FILE="${RESULT_DIR}/summary.txt"
+  RBAC_LOG="${RESULT_DIR}/rbac-tests.txt"
+  RESOURCE_LOG="${RESULT_DIR}/resource-tests.txt"
+  NETWORK_LOG="${RESULT_DIR}/network-tests.txt"
+  CLUSTER_LOG="${RESULT_DIR}/cluster-state.txt"
+
+  mkdir -p "${RESULT_DIR}" "${RENDER_DIR}"
+  {
+    echo "Result directory: ${RESULT_DIR}"
+    echo "Bootstrap kubeconfig: ${BOOTSTRAP_KUBECONFIG}"
+    echo "Context: $(kubeconfig_current_context "${BOOTSTRAP_KUBECONFIG}")"
+    echo "Cluster server: $(kubeconfig_current_server "${BOOTSTRAP_KUBECONFIG}")"
+  } > "${SUMMARY_FILE}"
+}
+
+write_summary_footer() {
+  local status="${1:-unknown}"
+
+  if [[ -z "${RESULT_DIR}" || "${FINAL_SUMMARY_WRITTEN}" == true ]]; then
+    return 0
+  fi
+
+  {
+    echo "Status: ${status}"
+    echo "Passed: ${PASS_COUNT}"
+    echo "Failed: ${FAIL_COUNT}"
+  } >> "${SUMMARY_FILE}"
+  FINAL_SUMMARY_WRITTEN=true
+}
+
+on_exit() {
+  local exit_code=$?
+
+  if [[ -n "${RESULT_DIR}" ]]; then
+    if [[ "${exit_code}" -eq 0 ]]; then
+      write_summary_footer "passed"
+    else
+      write_summary_footer "failed"
+    fi
+  fi
+}
+
+trap on_exit EXIT
+
 live_cluster_available() {
   if ! command -v kubectl >/dev/null 2>&1; then
     return 1
@@ -47,7 +89,8 @@ live_cluster_available() {
     return 1
   fi
 
-  kubectl --kubeconfig "${BOOTSTRAP_KUBECONFIG}" cluster-info >/dev/null 2>&1
+  normalize_loopback_server "${BOOTSTRAP_KUBECONFIG}" >/dev/null || true
+  cluster_reachable "${BOOTSTRAP_KUBECONFIG}"
 }
 
 need_cmd() {
@@ -129,6 +172,52 @@ assert_command_failure() {
   fi
 }
 
+assert_equals() {
+  local logfile="$1"
+  local description="$2"
+  local expected="$3"
+  local actual="$4"
+
+  {
+    echo "Expected: ${expected}"
+    echo "Actual: ${actual}"
+  } >> "${logfile}"
+
+  if [[ "${actual}" == "${expected}" ]]; then
+    record_result PASS "${description}" "${logfile}"
+  else
+    record_result FAIL "${description}" "${logfile}"
+  fi
+}
+
+assert_command_success_retry() {
+  local logfile="$1"
+  local description="$2"
+  local attempts="$3"
+  local sleep_seconds="$4"
+  shift 4
+
+  local output=""
+  local attempt
+
+  for (( attempt=1; attempt<=attempts; attempt++ )); do
+    if output="$("$@" 2>&1)"; then
+      printf '%s\n' "${output}" >> "${logfile}"
+      record_result PASS "${description}" "${logfile}"
+      return 0
+    fi
+
+    printf '%s\n' "${output}" >> "${logfile}"
+    if (( attempt < attempts )); then
+      printf '[tests] retrying (%s/%s): %s\n' "${attempt}" "${attempts}" "${description}" >> "${logfile}"
+      sleep "${sleep_seconds}"
+    fi
+  done
+
+  record_result FAIL "${description}" "${logfile}"
+  return 1
+}
+
 capture_cluster_state() {
   {
     echo "# Namespaces"
@@ -171,9 +260,20 @@ cleanup_test_resources() {
 run_rbac_tests() {
   local dev_a="artifacts/kubeconfigs/team-a-developer.kubeconfig"
   local viewer_a="artifacts/kubeconfigs/team-a-viewer.kubeconfig"
+  local dev_ns viewer_ns dev_user viewer_user
 
   : > "${RBAC_LOG}"
   echo "# RBAC tests" >> "${RBAC_LOG}"
+
+  dev_ns="$(kubeconfig_current_namespace "${dev_a}")"
+  viewer_ns="$(kubeconfig_current_namespace "${viewer_a}")"
+  dev_user="$(kubeconfig_current_user "${dev_a}")"
+  viewer_user="$(kubeconfig_current_user "${viewer_a}")"
+
+  assert_equals "${RBAC_LOG}" "Developer A kubeconfig defaults to namespace team-a" "team-a" "${dev_ns}"
+  assert_equals "${RBAC_LOG}" "Viewer A kubeconfig defaults to namespace team-a" "team-a" "${viewer_ns}"
+  assert_equals "${RBAC_LOG}" "Developer A kubeconfig uses subject team-a-developer" "team-a-developer" "${dev_user}"
+  assert_equals "${RBAC_LOG}" "Viewer A kubeconfig uses subject team-a-viewer" "team-a-viewer" "${viewer_user}"
 
   assert_allow "${RBAC_LOG}" "Developer A can create deployments in team-a" "${dev_a}" create deployments -n team-a
   assert_allow "${RBAC_LOG}" "Developer A can get pods in team-a" "${dev_a}" get pods -n team-a
@@ -184,7 +284,7 @@ run_rbac_tests() {
   assert_deny "${RBAC_LOG}" "Developer A cannot update resourcequotas in team-a" "${dev_a}" update resourcequotas -n team-a
   assert_deny "${RBAC_LOG}" "Developer A cannot update networkpolicies in team-a" "${dev_a}" update networkpolicies -n team-a
   assert_deny "${RBAC_LOG}" "Developer A cannot create rolebindings in team-a" "${dev_a}" create rolebindings -n team-a
-  assert_deny "${RBAC_LOG}" "Developer A cannot patch namespace team-a" "${dev_a}" patch namespace/team-a
+  assert_deny "${RBAC_LOG}" "Developer A cannot patch namespace team-a" "${dev_a}" patch namespaces team-a
   assert_deny "${RBAC_LOG}" "Developer A cannot get secrets in team-a" "${dev_a}" get secrets -n team-a
 
   assert_allow "${RBAC_LOG}" "Viewer A can get pods in team-a" "${viewer_a}" get pods -n team-a
@@ -309,9 +409,9 @@ run_network_tests() {
   assert_command_success "${NETWORK_LOG}" "Client pod in team-b becomes Ready" \
     kubectl --kubeconfig "${dev_b}" wait --for=condition=Ready pod/network-client -n team-b --timeout=180s
 
-  assert_command_success "${NETWORK_LOG}" "Pod in team-a can reach service in team-a over TCP" \
+  assert_command_success_retry "${NETWORK_LOG}" "Pod in team-a can reach service in team-a over TCP" 5 3 \
     kubectl_admin exec -n team-a network-client -- wget -q -T 5 -O - http://http-echo.team-a.svc.cluster.local
-  assert_command_success "${NETWORK_LOG}" "Pod in team-b can reach service in team-b over TCP" \
+  assert_command_success_retry "${NETWORK_LOG}" "Pod in team-b can reach service in team-b over TCP" 5 3 \
     kubectl_admin exec -n team-b network-client -- wget -q -T 5 -O - http://http-echo.team-b.svc.cluster.local
   assert_command_failure "${NETWORK_LOG}" "Pod in team-a cannot reach service in team-b over TCP" \
     kubectl_admin exec -n team-a network-client -- wget -q -T 5 -O - http://http-echo.team-b.svc.cluster.local
@@ -336,6 +436,8 @@ need_cmd base64
 log "Checking cluster connectivity"
 kubectl_admin cluster-info >/dev/null
 
+init_result_dir
+
 log "Ensuring tenant namespaces and kubeconfigs exist"
 scripts/onboard-team.sh team-a
 scripts/onboard-team.sh team-b
@@ -354,14 +456,10 @@ run_resource_tests
 log "Running NetworkPolicy tests"
 run_network_tests
 
-{
-  echo "Result directory: ${RESULT_DIR}"
-  echo "Passed: ${PASS_COUNT}"
-  echo "Failed: ${FAIL_COUNT}"
-} | tee -a "${SUMMARY_FILE}"
-
 if [[ "${FAIL_COUNT}" -gt 0 ]]; then
+  write_summary_footer "failed"
   die "one or more tests failed; see ${SUMMARY_FILE}"
 fi
 
+write_summary_footer "passed"
 log "Live Kubernetes validation passed. Results saved to ${RESULT_DIR}"

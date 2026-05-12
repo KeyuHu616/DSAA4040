@@ -120,12 +120,13 @@ This balances security with lab compatibility:
 
 - `baseline` blocks the most obviously dangerous pod configurations
 - `restricted` in audit and warn mode still surfaces stronger hardening advice during testing and demos
+- the repository test workloads also set `runAsNonRoot`, `seccompProfile: RuntimeDefault`, and dropped capabilities to stay close to the restricted baseline
 
 ## Automation Flow
 
 The platform automation is intentionally small and direct:
 
-1. `bootstrap-cluster.sh` prepares K3s plus Calico or Minikube plus Calico.
+1. `bootstrap-cluster.sh` prepares the recommended `k3d` lab cluster and keeps optional support for direct `k3s` or `minikube`.
 2. `onboard-team.sh` applies tenant YAML and issues tenant kubeconfigs.
 3. `issue-user-kubeconfig.sh` performs CSR-based certificate issuance.
 4. `run-tests.sh` executes RBAC, quota, limit, and network tests and stores evidence.

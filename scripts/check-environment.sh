@@ -4,22 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
-default_bootstrap_kubeconfig() {
-  if [[ -n "${BOOTSTRAP_KUBECONFIG:-}" ]]; then
-    printf '%s\n' "${BOOTSTRAP_KUBECONFIG}"
-  elif [[ -n "${KUBECONFIG:-}" && "${KUBECONFIG}" != *:* && -f "${KUBECONFIG}" ]]; then
-    printf '%s\n' "${KUBECONFIG}"
-  else
-    printf '%s\n' "${HOME}/.kube/config"
-  fi
-}
+source "${ROOT_DIR}/scripts/lib-kubeconfig.sh"
 
 BOOTSTRAP_KUBECONFIG="$(default_bootstrap_kubeconfig)"
 LIVE_TOOLING_READY=true
 LIVE_CLUSTER_AVAILABLE=false
 DOCKER_ACCESS=false
 K3D_CLUSTER_CONTEXT="${K3D_CLUSTER_CONTEXT:-k3d-dsaa4040-lab}"
-K3D_API_SERVER="${K3D_API_SERVER:-https://127.0.0.1:6550}"
 
 report() {
   local level="$1"
@@ -28,19 +19,13 @@ report() {
 }
 
 fix_k3d_kubeconfig_server() {
-  local current_context current_cluster current_server
+  local current_server normalized_server
 
-  current_context="$(kubectl --kubeconfig "${BOOTSTRAP_KUBECONFIG}" config current-context 2>/dev/null || true)"
-  current_cluster="$(kubectl --kubeconfig "${BOOTSTRAP_KUBECONFIG}" config view --raw --minify -o jsonpath='{.clusters[0].name}' 2>/dev/null || true)"
-  current_server="$(kubectl --kubeconfig "${BOOTSTRAP_KUBECONFIG}" config view --raw --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
+  current_server="$(kubeconfig_current_server "${BOOTSTRAP_KUBECONFIG}")"
+  normalized_server="$(normalize_loopback_server "${BOOTSTRAP_KUBECONFIG}" "${K3D_CLUSTER_CONTEXT}")"
 
-  if [[ "${current_server}" == *"0.0.0.0:6550"* ]] && [[ "${current_context}" == "${K3D_CLUSTER_CONTEXT}" || "${current_cluster}" == "${K3D_CLUSTER_CONTEXT}" ]]; then
-    report WARN "bootstrap kubeconfig currently points at ${current_server}; rewriting ${K3D_CLUSTER_CONTEXT} to ${K3D_API_SERVER}"
-    if kubectl config --kubeconfig "${BOOTSTRAP_KUBECONFIG}" set-cluster "${K3D_CLUSTER_CONTEXT}" --server="${K3D_API_SERVER}" >/dev/null 2>&1; then
-      report PASS "rewrote ${K3D_CLUSTER_CONTEXT} server to ${K3D_API_SERVER}"
-    else
-      report WARN "failed to rewrite ${K3D_CLUSTER_CONTEXT}; inspect ${BOOTSTRAP_KUBECONFIG} manually"
-    fi
+  if [[ -n "${current_server}" && "${current_server}" != "${normalized_server}" ]]; then
+    report PASS "rewrote ${K3D_CLUSTER_CONTEXT} server from ${current_server} to ${normalized_server}"
   fi
 }
 
@@ -73,16 +58,8 @@ else
   LIVE_TOOLING_READY=false
 fi
 
-for cmd in kubectl openssl jq yq curl wget; do
+for cmd in bash python3 kubectl openssl curl wget; do
   check_command "${cmd}" || true
-done
-
-for cmd in node npm; do
-  if command -v "${cmd}" >/dev/null 2>&1; then
-    report PASS "${cmd} found at $(command -v "${cmd}")"
-  else
-    report WARN "${cmd} is not available; local frontend build and UI validation will be unavailable"
-  fi
 done
 
 if command -v docker >/dev/null 2>&1; then
@@ -110,7 +87,10 @@ if command -v kubectl >/dev/null 2>&1; then
   if [[ -f "${BOOTSTRAP_KUBECONFIG}" ]]; then
     report PASS "bootstrap kubeconfig found at ${BOOTSTRAP_KUBECONFIG}"
     fix_k3d_kubeconfig_server
-    if kubectl --kubeconfig "${BOOTSTRAP_KUBECONFIG}" cluster-info >/dev/null 2>&1; then
+    report INFO "current context: $(kubeconfig_current_context "${BOOTSTRAP_KUBECONFIG}")"
+    report INFO "current cluster: $(kubeconfig_current_cluster "${BOOTSTRAP_KUBECONFIG}")"
+    report INFO "current server: $(kubeconfig_current_server "${BOOTSTRAP_KUBECONFIG}")"
+    if cluster_reachable "${BOOTSTRAP_KUBECONFIG}"; then
       LIVE_CLUSTER_AVAILABLE=true
       report PASS "a live Kubernetes cluster is reachable from ${BOOTSTRAP_KUBECONFIG}"
     else

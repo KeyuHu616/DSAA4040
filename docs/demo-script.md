@@ -1,20 +1,12 @@
 # Demo Script
 
-## Recording Requirement
+## Goal
 
-The final live demo should be recorded on the local Windows machine inside WSL2 Ubuntu, not on the no-sudo Linux server. The Linux server is only for coding and static validation.
+This script provides a clean grading-oriented demo for the final E3 submission. The recommended environment is WSL2 Ubuntu with Docker Desktop and a `k3d` cluster.
 
-The live demo environment is:
+## Demo Flow
 
-- Windows
-- WSL2 Ubuntu
-- Docker Desktop with WSL integration enabled
-- Conda environment `cloud`
-- k3d-based Kubernetes cluster
-
-## Exact Demo Order
-
-### 1. Activate the Conda Environment
+### 1. Activate the Conda environment
 
 ```bash
 conda activate cloud
@@ -23,42 +15,9 @@ chmod +x scripts/*.sh
 
 What to say:
 
-`I am using the shared cloud Conda environment required by the project workflow.`
+`The repository uses the shared cloud Conda environment for reproducible tooling.`
 
-### 2. Prove Docker Access in WSL2
-
-```bash
-docker ps
-```
-
-What to say:
-
-`This confirms that Docker Desktop WSL integration is working and that this machine can run live Kubernetes validation.`
-
-### 3. Create the k3d Cluster
-
-```bash
-k3d cluster create dsaa4040-lab --servers 1 --agents 1 --api-port 127.0.0.1:6550 --wait
-k3d kubeconfig merge dsaa4040-lab --kubeconfig-merge-default --kubeconfig-switch-context
-kubectl config set-cluster k3d-dsaa4040-lab --server=https://127.0.0.1:6550
-```
-
-What to say:
-
-`The live cluster for the demo is a k3d cluster named dsaa4040-lab running inside Docker.`
-
-### 4. Show the Kubernetes Node
-
-```bash
-export BOOTSTRAP_KUBECONFIG="$HOME/.kube/config"
-kubectl get nodes -o wide
-```
-
-What to say:
-
-`The Kubernetes control plane is reachable from WSL2.`
-
-### 5. Run the Environment Check
+### 2. Show environment readiness
 
 ```bash
 bash scripts/check-environment.sh
@@ -66,39 +25,43 @@ bash scripts/check-environment.sh
 
 What to say:
 
-`This script reports whether the current machine is ready for live validation and does not claim success if Docker or Kubernetes access is missing.`
+`This confirms whether Docker, kubectl, and a live Kubernetes cluster are reachable from the current shell.`
 
-### 6. Run Cluster Bootstrap
+### 3. Bootstrap the cluster
 
 ```bash
 bash scripts/bootstrap-cluster.sh
+kubectl get nodes -o wide
 ```
 
 What to say:
 
-`The bootstrap script targets the k3d workflow by default and connects the repository automation to the live cluster.`
+`The project uses a lightweight k3d-backed K3s cluster for reproducible local validation.`
 
-### 7. Onboard Team A
+### 4. Onboard Team A and Team B
 
 ```bash
 bash scripts/onboard-team.sh team-a
-```
-
-What to say:
-
-`This applies namespace labels, pod security labels, RBAC, quotas, limits, network policies, and generates team-a kubeconfigs.`
-
-### 8. Onboard Team B
-
-```bash
 bash scripts/onboard-team.sh team-b
 ```
 
 What to say:
 
-`This repeats the same automation for the second required tenant.`
+`Onboarding applies namespace labels, RBAC, ResourceQuota, LimitRange, NetworkPolicy, and generates tenant kubeconfigs.`
 
-### 9. Run the Automated Tests
+### 5. Show generated kubeconfigs
+
+```bash
+ls -1 artifacts/kubeconfigs
+kubectl config view --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig --minify -o jsonpath='{.contexts[0].context.namespace}'; echo
+kubectl config view --kubeconfig artifacts/kubeconfigs/team-b-viewer.kubeconfig --minify -o jsonpath='{.contexts[0].context.namespace}'; echo
+```
+
+What to say:
+
+`The tenant kubeconfigs default to the correct namespace and map to simulated tenant users.`
+
+### 6. Run the automated tests
 
 ```bash
 bash scripts/run-tests.sh
@@ -106,58 +69,33 @@ bash scripts/run-tests.sh
 
 What to say:
 
-`The test suite first performs static validation and then runs live RBAC, quota, limit, and TCP-based network isolation tests because a real Kubernetes cluster is available in WSL2.`
+`The test suite runs static validation first and then executes live RBAC, resource-governance, and TCP-based network isolation checks.`
 
-### 10. Show the Test Evidence
+### 7. Show test evidence
 
 ```bash
-ls -1dt artifacts/test-results/*
 LATEST_RESULT="$(ls -1dt artifacts/test-results/* | head -n 1)"
-echo "$LATEST_RESULT"
-cat "$LATEST_RESULT/summary.txt"
+echo "${LATEST_RESULT}"
+cat "${LATEST_RESULT}/summary.txt"
 ```
 
 What to say:
 
-`All grading evidence is written to artifacts/test-results so the result is reproducible and inspectable after the demo.`
+`All validation evidence is stored under artifacts/test-results so the grader can inspect the results after the demo.`
 
-## Optional GUI Demo Flow
-
-If you want to show the optional local dashboard after the main CLI demo:
-
-```bash
-streamlit run gui/app.py --server.address 127.0.0.1 --server.port 8501
-```
-
-Then in the browser:
-
-1. open the dashboard at `http://127.0.0.1:8501`
-2. show the Cluster Overview section
-3. show the tenant resource sections for `team-a` and `team-b`
-4. optionally click `Run tests`
-5. show the latest files in the Test Results Viewer
-
-What to say:
-
-`This GUI is only a lightweight local presentation dashboard. It shells out to the existing scripts and reads the saved artifacts without replacing the Kubernetes platform implementation.`
-
-## Optional Follow-Up Shots
-
-If time allows, show these after the main flow:
+### 8. Optional spot checks
 
 ```bash
 kubectl --kubeconfig artifacts/kubeconfigs/team-a-developer.kubeconfig auth can-i get pods -n team-b
 kubectl --kubeconfig artifacts/kubeconfigs/team-a-viewer.kubeconfig auth can-i create deployments -n team-a
-kubectl --kubeconfig "$BOOTSTRAP_KUBECONFIG" exec -n team-a network-client -- \
+kubectl --kubeconfig "$HOME/.kube/config" exec -n team-a network-client -- \
   wget -q -T 5 -O - http://http-echo.team-b.svc.cluster.local
 ```
 
-These reinforce:
+What to say:
 
-- cross-tenant RBAC denial
-- viewer read-only behavior
-- cross-namespace TCP denial
+`These spot checks reinforce cross-tenant RBAC denial, viewer read-only behavior, and cross-namespace TCP denial.`
 
 ## Closing Statement
 
-`This platform is a soft multi-tenant teaching lab, not hard multi-tenancy. The static validation was done on the development server, and the full live Kubernetes validation was completed here in WSL2 with Docker Desktop and k3d.`
+`This platform is a soft multi-tenant teaching lab, not hard multi-tenancy. The implementation demonstrates namespace-based isolation, RBAC, resource governance, network isolation, and automated onboarding in a reproducible single-node Kubernetes environment.`
